@@ -1,0 +1,60 @@
+name: Daily RFP Scan
+
+on:
+  schedule:
+    # Runs at 12:00 UTC = 7:00 AM Eastern / 4:00 AM Pacific, every day
+    - cron: "0 12 * * *"
+
+  # Allow triggering manually from the GitHub Actions UI
+  workflow_dispatch:
+
+jobs:
+  scan:
+    name: Scan & Email Digest
+    runs-on: ubuntu-latest
+
+    # Grant write permission so the job can commit seen_urls.json back
+    permissions:
+      contents: write
+
+    steps:
+      # ── 1. Checkout the repo ────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Fetch with the full token so we can push changes back
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Set up Python ────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── 3. Install dependencies ─────────────────────────────────────────
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # ── 4. Run the scanner ──────────────────────────────────────────────
+      - name: Run RFP Scanner
+        env:
+          # Required
+          SERPER_API_KEY:   ${{ secrets.SERPER_API_KEY }}
+          RESEND_API_KEY:   ${{ secrets.RESEND_API_KEY }}
+          RECIPIENT_EMAIL:  ${{ secrets.RECIPIENT_EMAIL }}
+          # Optional — leave blank if not using
+          SENDER_EMAIL:     ${{ secrets.SENDER_EMAIL }}
+          SAM_API_KEY:      ${{ secrets.SAM_API_KEY }}
+        run: python main.py
+
+      # ── 5. Commit updated seen_urls.json ────────────────────────────────
+      - name: Commit seen URLs (deduplication store)
+        run: |
+          git config user.name  "rfp-scout-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/seen_urls.json
+          # Only commit if the file actually changed
+          git diff --staged --quiet \
+            || git commit -m "chore: update seen_urls.json [skip ci]"
+          git push
