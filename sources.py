@@ -9,6 +9,8 @@ Sources:
   - Tennessee Procurement static page      (no key needed)
   - Infor/BuySpeed state portals           (no key needed)
       Confirmed: Arizona (app.az.gov)
+  - USASpending.gov expiring contracts     (no key needed)
+      Surfaces federal contracts expiring within 12 months — signals upcoming RFPs
   - Virginia eVA                           (requires browser / Playwright — Phase 2)
 """
 
@@ -435,3 +437,142 @@ def search_infor_portal(base_url: str, state_name: str, keywords: List[str]) -> 
     except Exception as e:
         print(f"    [{state_name}] Error: {e}")
         return []
+
+
+# ---------------------------------------------------------------------------
+# USASpending.gov — Expiring Federal Contracts
+#
+# Strategy: Find federal contracts in our software categories that expire
+# within the next 12 months. Agencies whose incumbent software contracts are
+# expiring will typically issue an RFP soon — this gives a leading signal.
+#
+# API: POST https://api.usaspending.gov/api/v2/search/spending_by_award/
+# No API key required. Rate limits are generous (public API).
+#
+# Results are labeled "Expiring Federal Contract" — NOT active RFPs — so
+# main.py handles them separately and they are rendered in a distinct section
+# of the email digest.
+# ---------------------------------------------------------------------------
+
+def search_usaspending(keywords: List[str]) -> List[Dict]:
+    """
+    Query USASpending.gov for federal contracts expiring within the next
+    12 months that match any of the given keywords.
+
+    Returns a list of dicts with source = "Expiring Federal Contract".
+    These are NOT RFPs; they signal agencies likely to issue RFPs soon.
+    """
+    url = "https://api.usaspending.gov/api/v2/search/spending_by_award/"
+    today = datetime.now()
+    # Contracts that end between today and 12 months from now
+    end_before = (today + timedelta(days=365)).strftime("%Y-%m-%d")
+    end_after  = today.strftime("%Y-%m-%d")
+
+    results: List[Dict] = []
+
+    for kw in keywords:
+        try:
+            payload = {
+                "filters": {
+                    "keywords":         [kw],
+                    "award_type_codes": ["A", "B", "C", "D"],   # procurement contracts
+                    "time_period": [{
+                        "start_date": "2020-01-01",
+                        "end_date":   end_before,
+                    }],
+                },
+                "fields": [
+                    "Award ID",
+                    "Recipient Name",
+                    "Description",
+                    "Award Amount",
+                    "Start Date",
+                    "End Date",
+                    "Awarding Agency",
+                    "Awarding Sub Agency",
+                    "naics_description",
+                ],
+                "page":  1,
+                "limit": 10,
+                "sort":  "End Date",
+                "order": "desc",
+            }
+
+            resp = httpx.post(url, json=payload, timeout=30)
+            if resp.status_code != 200:
+                print(f"    [USASpending] HTTP {resp.status_code} for: {kw}")
+                continue
+
+            text = resp.text.strip()
+            if not text:
+                continue
+
+            data = resp.json()
+
+            for award in data.get("results", []):
+                end_date = award.get("End Date", "")
+                # Only include contracts expiring within the next 12 months
+                if end_date:
+                    try:
+                        exp = datetime.strptime(end_date, "%Y-%m-%d")
+                        if not (today <= exp <= today + timedelta(days=365)):
+                            continue
+                    except ValueError:
+                        pass
+
+                award_id   = award.get("Award ID", "")
+                recipient  = award.get("Recipient Name", "")
+                description = award.get("Description", "") or ""
+                amount     = award.get("Award Amount", "")
+                start_date = award.get("Start Date", "")
+                agency     = award.get("Awarding Agency", "")
+                sub_agency = award.get("Awarding Sub Agency", "")
+                naics      = award.get("naics_description", "")
+
+                # Build a readable title
+                desc_short = description[:80].strip() if description else kw.title()
+                title = f"[Expiring Contract] {desc_short}"
+
+                # Build detail URL
+                opp_url = f"https://www.usaspending.gov/award/{award_id}/" if award_id else url
+
+                # Build description with context
+                amount_str = f"${amount:,.0f}" if isinstance(amount, (int, float)) else str(amount)
+                parts = []
+                if agency:
+                    parts.append(f"Agency: {agency}")
+                if sub_agency and sub_agency != agency:
+                    parts.append(f"Sub-Agency: {sub_agency}")
+                if recipient:
+                    parts.append(f"Incumbent: {recipient}")
+                if amount_str:
+                    parts.append(f"Value: {amount_str}")
+                if start_date and end_date:
+                    parts.append(f"Period: {start_date} → {end_date}")
+                if naics:
+                    parts.append(f"NAICS: {naics}")
+
+                results.append({
+                    "title":       title,
+                    "url":         opp_url,
+                    "description": "  |  ".join(parts)[:300],
+                    "source":      "Expiring Federal Contract",
+                    "posted_date": end_date,   # reuse field to show expiry date
+                    "agency":      sub_agency or agency,
+                    "score":       55,          # pre-scored — bypass standard scorer
+                })
+
+        except Exception as e:
+            print(f"    [USASpending] Error for '{kw}': {e}")
+
+        time.sleep(0.4)
+
+    # Deduplicate by award URL
+    seen: set = set()
+    unique = []
+    for r in results:
+        if r["url"] not in seen:
+            seen.add(r["url"])
+            unique.append(r)
+
+    return unique

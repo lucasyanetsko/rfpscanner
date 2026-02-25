@@ -28,6 +28,7 @@ from config import (
     SEARCH_QUERIES,
     BIDNET_KEYWORDS,
     SAM_KEYWORDS,
+    USASPENDING_KEYWORDS,
     INFOR_PORTALS,
     MIN_SCORE,
     LOOKBACK_DAYS,
@@ -39,6 +40,7 @@ from sources import (
     search_opengov,
     search_tennessee,
     search_infor_portal,
+    search_usaspending,
 )
 from filters import score_opportunity, deduplicate
 from email_digest import send_digest
@@ -74,22 +76,23 @@ def main() -> None:
     print(f"{'='*55}\n")
 
     seen_urls    = load_seen_urls()
-    all_raw: list = []
+    all_raw: list  = []   # standard RFP results — go through scorer
+    pre_scored: list = [] # results with score already set (e.g. USASpending)
 
     # ── 1. Google Search (Serper.dev) ──────────────────────────────────────
     serper_key = os.environ.get("SERPER_API_KEY")
     if serper_key:
-        print(f"[1/6] Google Search ({len(SEARCH_QUERIES)} queries via Serper.dev)…")
+        print(f"[1/7] Google Search ({len(SEARCH_QUERIES)} queries via Serper.dev)…")
         for query in SEARCH_QUERIES:
             results = search_google(query, serper_key, lookback_days=LOOKBACK_DAYS)
             all_raw.extend(results)
             if results:
                 print(f"      ✓ {len(results):>3} results  |  {query[:60]}")
     else:
-        print("[1/6] Skipping Google Search (SERPER_API_KEY not set)")
+        print("[1/7] Skipping Google Search (SERPER_API_KEY not set)")
 
     # ── 2. BidNet Direct ───────────────────────────────────────────────────
-    print(f"\n[2/6] BidNet Direct ({len(BIDNET_KEYWORDS)} keywords)…")
+    print(f"\n[2/7] BidNet Direct ({len(BIDNET_KEYWORDS)} keywords)…")
     for keyword in BIDNET_KEYWORDS:
         results = search_bidnet(keyword)
         all_raw.extend(results)
@@ -97,7 +100,7 @@ def main() -> None:
             print(f"      ✓ {len(results):>3} results  |  {keyword}")
 
     # ── 3. OpenGov ─────────────────────────────────────────────────────────
-    print(f"\n[3/6] OpenGov Procurement…")
+    print(f"\n[3/7] OpenGov Procurement…")
     og_results = search_opengov(BIDNET_KEYWORDS)
     all_raw.extend(og_results)
     print(f"      ✓ {len(og_results)} results total")
@@ -105,26 +108,36 @@ def main() -> None:
     # ── 4. SAM.gov (optional) ─────────────────────────────────────────────
     sam_key = os.environ.get("SAM_API_KEY")
     if sam_key:
-        print(f"\n[4/6] SAM.gov ({len(SAM_KEYWORDS)} keywords)…")
+        print(f"\n[4/7] SAM.gov ({len(SAM_KEYWORDS)} keywords)…")
         results = search_sam_gov(sam_key, SAM_KEYWORDS, lookback_days=LOOKBACK_DAYS)
         all_raw.extend(results)
         print(f"      ✓ {len(results)} results total")
     else:
-        print("\n[4/6] Skipping SAM.gov (SAM_API_KEY not set — optional)")
+        print("\n[4/7] Skipping SAM.gov (SAM_API_KEY not set — optional)")
 
     # ── 5. Tennessee Procurement (static HTML table) ───────────────────────
-    print(f"\n[5/6] Tennessee Procurement…")
+    print(f"\n[5/7] Tennessee Procurement…")
     tn_results = search_tennessee(REQUIRED_KEYWORDS)
     all_raw.extend(tn_results)
     print(f"      ✓ {len(tn_results)} results total")
 
     # ── 6. Infor/BuySpeed State Portals ───────────────────────────────────
-    print(f"\n[6/6] Infor State Portals ({len(INFOR_PORTALS)} states)…")
+    print(f"\n[6/7] Infor State Portals ({len(INFOR_PORTALS)} states)…")
     for state_name, base_url in INFOR_PORTALS.items():
         results = search_infor_portal(base_url, state_name, REQUIRED_KEYWORDS)
         all_raw.extend(results)
         if results:
             print(f"      ✓ {len(results):>3} results  |  {state_name}")
+
+    # ── 7. USASpending.gov — Expiring Federal Contracts ───────────────────
+    print(f"\n[7/7] USASpending.gov ({len(USASPENDING_KEYWORDS)} keywords)…")
+    us_results = search_usaspending(USASPENDING_KEYWORDS)
+    # Filter out already-seen contracts
+    for opp in us_results:
+        url_key = opp["url"].split("?")[0].split("#")[0].rstrip("/").lower()
+        if url_key not in seen_urls:
+            pre_scored.append(opp)
+    print(f"      ✓ {len(pre_scored)} new expiring contracts found")
 
     # ── Deduplicate ────────────────────────────────────────────────────────
     print(f"\n  Raw results   : {len(all_raw)}")
@@ -142,9 +155,10 @@ def main() -> None:
 
     scored.sort(key=lambda x: x["score"], reverse=True)
     print(f"  New & relevant: {len(scored)}")
+    print(f"  Expiring contracts: {len(pre_scored)}")
 
     # ── Update seen-URL store ──────────────────────────────────────────────
-    for opp in scored:
+    for opp in scored + pre_scored:
         seen_urls.add(opp["url"].split("?")[0].split("#")[0].rstrip("/").lower())
     save_seen_urls(seen_urls)
 
@@ -153,6 +167,12 @@ def main() -> None:
         print(f"\n  Top opportunities:")
         for opp in scored[:10]:
             print(f"    [{opp['score']:>3}] {opp['title'][:65]}")
+            print(f"          {opp['url'][:80]}")
+
+    if pre_scored:
+        print(f"\n  Expiring federal contracts:")
+        for opp in pre_scored[:5]:
+            print(f"    [exp] {opp['title'][:65]}")
             print(f"          {opp['url'][:80]}")
 
     # ── Send email ─────────────────────────────────────────────────────────
@@ -168,13 +188,13 @@ def main() -> None:
         print("\n  RECIPIENT_EMAIL not set — skipping email.")
         sys.exit(0)
 
-    if not scored:
+    if not scored and not pre_scored:
         print("\n  No new opportunities found — skipping email (nothing to send).")
         sys.exit(0)
 
     print(f"\n  Sending digest to {recipient}…")
     try:
-        result = send_digest(scored, recipient, resend_key, sender)
+        result = send_digest(scored, pre_scored, recipient, resend_key, sender)
         print(f"  Email sent! ID: {result.get('id', 'n/a')}")
     except Exception as e:
         print(f"  Email send failed: {e}")

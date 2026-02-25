@@ -273,6 +273,28 @@ JUNK_URL_PATHS = [
 ]
 
 # ---------------------------------------------------------------------------
+# USASPENDING.GOV KEYWORDS
+# Searched against the federal contract database for contracts expiring
+# within the next 12 months — signals agencies likely to issue RFPs soon.
+# Keep this list focused; USASpending keyword search is exact-phrase based.
+# ---------------------------------------------------------------------------
+USASPENDING_KEYWORDS = [
+    "case management software",
+    "case management system",
+    "licensing system",
+    "licensing software",
+    "permitting software",
+    "permit management",
+    "certification management",
+    "credentialing system",
+    "workflow management",
+    "benefits administration",
+    "grants management",
+    "constituent portal",
+    "intake management",
+]
+
+# ---------------------------------------------------------------------------
 # INFOR/BUYSPEED STATE PROCUREMENT PORTALS
 #
 # These states run procurement on the Infor Public Sector platform.
