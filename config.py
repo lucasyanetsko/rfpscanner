@@ -120,6 +120,7 @@ NEGATIVE_KEYWORDS = [
 # Each returns up to 20 results from the last LOOKBACK_DAYS days.
 # ---------------------------------------------------------------------------
 SEARCH_QUERIES = [
+    # ── Core procurement queries ───────────────────────────────────────────
     '"request for proposal" "case management" software',
     '"request for proposal" "case management system"',
     '"request for proposal" "licensing system" OR "licensing platform" software',
@@ -132,14 +133,36 @@ SEARCH_QUERIES = [
     '"request for proposal" "grants management" system software',
     '"request for proposal" "compliance management" software government',
     '"request for proposal" "credentialing system" OR "credentialing platform"',
-    'site:.gov "request for proposal" "case management" OR "licensing" software',
-    'site:.gov "solicitation" "case management" OR "permitting" software',
-    'RFP "case management" (government OR state OR county OR nonprofit) software 2025',
-    'RFP "licensing software" OR "licensing platform" government 2025',
     '"request for information" "case management" software government',
     '"request for proposal" "application processing" software government',
     '"request for proposal" "online permitting" OR "online licensing" platform',
     '"request for proposal" "form management" OR "digital forms" government software',
+
+    # ── .gov domain targeting (hits state portals Google has indexed) ──────
+    'site:.gov "request for proposal" "case management" software',
+    'site:.gov "request for proposal" "licensing system" OR "permitting system"',
+    'site:.gov "request for proposal" "workflow management" software',
+    'site:.gov "solicitation" "case management" OR "permitting" software',
+    'site:.gov "request for proposal" "grants management" software',
+    'site:.gov "request for proposal" "benefits administration" software',
+    'site:.gov "request for proposal" "credentialing" OR "certification management"',
+    'site:.gov "invitation to bid" "case management" OR "licensing system"',
+    'site:.gov solicitation "intake management" OR "intake system" software',
+    'site:.gov "request for information" "case management" OR "workflow" software',
+
+    # ── State-specific high-volume portal targeting ────────────────────────
+    'site:eva.virginia.gov "case management" OR "licensing" OR "permitting" software',
+    'site:esbd.cpa.texas.gov "case management" OR "workflow" OR "permitting"',
+    'site:ips.state.nc.us "case management" OR "licensing" OR "permitting"',
+    'site:emaryland.buyspeed.com "case management" OR "workflow" OR "licensing"',
+
+    # ── Year-anchored queries to ensure fresh 2026 results ────────────────
+    'RFP "case management" (state OR county OR municipality) software 2026',
+    'RFP "licensing software" OR "licensing platform" government 2026',
+    '"request for proposal" "case management system" government 2026',
+    '"request for proposal" "permitting software" OR "permitting platform" 2026',
+    '"request for proposal" "workflow automation" government agency 2026',
+    '"request for proposal" "citizen portal" OR "constituent portal" software 2026',
 ]
 
 # ---------------------------------------------------------------------------
@@ -248,3 +271,22 @@ JUNK_URL_PATHS = [
     "/story/", "/stories/",
     "/post/", "/posts/",
 ]
+
+# ---------------------------------------------------------------------------
+# INFOR/BUYSPEED STATE PROCUREMENT PORTALS
+#
+# These states run procurement on the Infor Public Sector platform.
+# All share the same scraping pattern — see search_infor_portal() in sources.py.
+#
+# Key: display name used in email digest  Value: base URL (no trailing slash)
+#
+# To add a new state, confirm its /ajax.aspx/en/rfp/request_browse_public
+# endpoint returns HTTP 200, then add it here.
+# ---------------------------------------------------------------------------
+INFOR_PORTALS = {
+    "Arizona":  "https://app.az.gov",
+    # Add more states as confirmed:
+    # "Maryland": "https://emma.maryland.gov",    # has browser-check CAPTCHA
+    # "Colorado": "https://bids.colorado.gov",    # TLS issues as of Feb 2026
+    # "Delaware": "https://bid.delaware.gov",     # connection refused as of Feb 2026
+}
