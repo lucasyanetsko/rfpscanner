@@ -178,7 +178,73 @@ SAM_KEYWORDS = [
 # SCORING THRESHOLDS
 # ---------------------------------------------------------------------------
 # Only include opportunities with a score at or above this value in the digest
-MIN_SCORE = 35
+MIN_SCORE = 45
 
 # Look back this many days when searching (slightly overlapping to avoid gaps)
 LOOKBACK_DAYS = 2
+
+# ---------------------------------------------------------------------------
+# BLOCKED DOMAINS
+# Known non-procurement sites that should never appear in results.
+# ---------------------------------------------------------------------------
+BLOCKED_DOMAINS = [
+    # E-commerce / corporate blogs
+    "amazon.com", "amazon.co.uk",
+    # Job boards
+    "linkedin.com", "indeed.com", "glassdoor.com", "ziprecruiter.com",
+    "monster.com", "careerbuilder.com",
+    # General news / media
+    "medium.com", "substack.com", "forbes.com", "bloomberg.com",
+    "reuters.com", "techcrunch.com", "venturebeat.com", "wired.com",
+    "theverge.com", "zdnet.com", "cnet.com",
+    # PR wire services (press releases, not RFPs)
+    "businesswire.com", "prnewswire.com", "globenewswire.com", "prweb.com",
+    "accesswire.com",
+    # Wikipedia / reference
+    "wikipedia.org", "en.wikipedia.org",
+    # Social media
+    "twitter.com", "x.com", "facebook.com", "reddit.com",
+]
+
+# ---------------------------------------------------------------------------
+# FOREIGN TLDs — results on these domains are outside the US
+# ---------------------------------------------------------------------------
+FOREIGN_TLDS = [
+    # UK
+    ".co.uk", ".org.uk", ".gov.uk", ".ac.uk", ".me.uk",
+    # Australia / NZ
+    ".com.au", ".net.au", ".org.au", ".gov.au", ".co.nz", ".govt.nz",
+    # Canada
+    ".ca",
+    # Europe
+    ".de", ".fr", ".eu", ".it", ".es", ".nl", ".be", ".se", ".no",
+    ".dk", ".fi", ".pl", ".at", ".ch", ".ie", ".pt", ".cz", ".hu",
+    # Asia / Pacific
+    ".cn", ".jp", ".kr", ".in", ".sg", ".hk", ".tw",
+    # Latin America
+    ".br", ".mx", ".ar", ".co", ".cl",
+    # Africa / Middle East
+    ".za", ".ae", ".sa",
+    # Other
+    ".ru", ".ua",
+]
+
+# ---------------------------------------------------------------------------
+# JUNK URL PATH PATTERNS
+# URLs containing these path segments are almost certainly blog posts,
+# news articles, or other non-procurement content.
+# ---------------------------------------------------------------------------
+JUNK_URL_PATHS = [
+    "/blog/", "/blogs/",
+    "/news/", "/newsroom/",
+    "/article/", "/articles/",
+    "/press/", "/press-release/", "/press-releases/",
+    "/media/", "/media-center/",
+    "/insights/", "/insight/",
+    "/resources/", "/resource/",
+    "/thought-leadership/",
+    "/whitepaper/", "/white-paper/",
+    "/podcast/", "/webinar/",
+    "/story/", "/stories/",
+    "/post/", "/posts/",
+]
