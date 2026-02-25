@@ -200,20 +200,28 @@ def send_digest(
     today   = datetime.now().strftime("%B %d, %Y")
     subject = f"RFP Scout: {count} new {noun} — {today}"
 
+    payload = {
+        "from":    sender,
+        "to":      [recipient],
+        "subject": subject,
+        "html":    build_html(opportunities),
+        "text":    build_plain_text(opportunities),
+    }
+    print(f"  [Resend] from={sender!r}  to={recipient!r}")
+
     resp = httpx.post(
         "https://api.resend.com/emails",
         headers={
             "Authorization":  f"Bearer {api_key}",
             "Content-Type":   "application/json",
         },
-        json={
-            "from":    sender,
-            "to":      [recipient],
-            "subject": subject,
-            "html":    build_html(opportunities),
-            "text":    build_plain_text(opportunities),
-        },
+        json=payload,
         timeout=30,
     )
-    resp.raise_for_status()
+
+    if not resp.is_success:
+        print(f"  [Resend] HTTP {resp.status_code} — response body:")
+        print(f"  {resp.text}")
+        resp.raise_for_status()
+
     return resp.json()
